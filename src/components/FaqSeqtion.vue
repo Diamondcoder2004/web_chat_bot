@@ -64,6 +64,20 @@ const filteredFaq = computed(() => {
   )
 })
 
+// Отображаемые вопросы (первые 5 или все)
+const displayedFaq = computed(() => {
+  if (showAll.value) {
+    return filteredFaq.value
+  }
+  return filteredFaq.value.slice(0, 5)
+})
+
+// Переключение режима "показать все"
+function toggleShowAll() {
+  showAll.value = !showAll.value
+}
+
+
 // Загрузка FAQ из CSV файла
 async function loadFaqFromCsv() {
   loading.value = true
@@ -126,6 +140,7 @@ function toggleFaq(id) {
 function filterFaq() {
   // Автоматически фильтруется через computed свойство
 }
+
 
 onMounted(() => {
   loadFaqFromCsv()
