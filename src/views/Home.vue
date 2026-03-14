@@ -108,7 +108,7 @@
 import { ref, computed, onMounted } from 'vue'
 import Header from '../components/Header.vue'
 import Footer from '../components/Footer.vue'
-import { apiService } from '../services/api'
+
 import { chatService } from '../services/supabase'
 import { useAuthStore } from '../stores/authStore'
 import { supabase } from '../services/supabase'
