@@ -8,103 +8,121 @@ export const useChatStore = defineStore('chat', () => {
   const isLoading = ref(false)
   const error = ref(null)
   const history = ref([])
-
+  const currentChatId = ref(null) // Добавлено для хранения ID текущего чата
+  const feedbacks = ref({}) // key: chatId, value: feedback object
+  
   const authStore = useAuthStore()
 
   // Добавить сообщение
-  function addMessage(role, content, sources = []) {
+  function addMessage(role, content, sources = [], chatId = null) {
     messages.value.push({
       id: Date.now(),
       role,
       content,
       sources,
+      chatId, // Сохраняем chatId для каждого сообщения ассистента
       timestamp: new Date()
     })
   }
 
   // Отправить вопрос
-// Вместо apiService.askQuestion используем chatService.sendQuery
   async function sendQuestion(question, parameters = {}) {
-    isLoading.value = true;
-    error.value = null;
+    isLoading.value = true
+    error.value = null
 
     try {
       // Добавляем вопрос пользователя
-      addMessage('user', question);
+      addMessage('user', question)
 
-      console.log('Sending question to RAG API via chatService...');
+      console.log('Sending question to RAG API via chatService...')
       // Формируем параметры запроса
       const params = {
-        k: parameters.top_k || 30,                 // переименовать в соответствии с QueryRequest
+        k: parameters.top_k || 30,
         rerank_top_k: parameters.rerank_top_k || 3,
         temperature: parameters.temperature || 0.8,
         max_tokens: parameters.max_tokens || 2000,
         min_score: parameters.min_score || 0.0
-      };
-      const response = await chatService.sendQuery(question, params);
+      }
+      const response = await chatService.sendQuery(question, params)
 
-      // Добавляем ответ ассистента
-      addMessage('assistant', response.answer, response.sources || []);
+      // Сохраняем chat_id из ответа (если бэкенд возвращает)
+      if (response.chat_id) {
+        currentChatId.value = response.chat_id
+      }
 
-      // Сохранение в БД происходит на бэкенде автоматически — не нужно вызывать дополнительно
+      // Добавляем ответ ассистента с chatId
+      addMessage('assistant', response.answer, response.sources || [], response.chat_id || null)
 
-      return response;
+      // Загружаем фидбек для этого чата если есть chat_id
+      if (response.chat_id) {
+        await loadFeedback(response.chat_id)
+      }
+
+      return response
     } catch (err) {
-      error.value = err.message || 'Ошибка при обработке вопроса';
-      console.error('Send question error:', err);
-      addMessage('assistant', 'Извините, произошла ошибка. Пожалуйста, попробуйте позже.');
-      throw err;
+      error.value = err.message || 'Ошибка при обработке вопроса'
+      console.error('Send question error:', err)
+      addMessage('assistant', 'Извините, произошла ошибка. Пожалуйста, попробуйте позже.')
+      throw err
     } finally {
-      isLoading.value = false;
+      isLoading.value = false
     }
   }
 
-  // В chatStore.js добавить
-  const feedbacks = ref({}); // key: chatId, value: feedback object
-
-  async function submitFeedback(chatId, type, rating, comment) {
+  // Отправить фидбек (лайк/дизлайк)
+  async function submitFeedback(chatId, type, rating = null, comment = null) {
     try {
-      const result = await feedbackService.createFeedback(chatId, type, rating, comment);
-      feedbacks.value[chatId] = result;
-      return result;
+      const result = await feedbackService.createFeedback(chatId, type, rating, comment)
+      feedbacks.value[chatId] = result
+      return result
     } catch (err) {
-      console.error('Failed to submit feedback:', err);
-      throw err;
+      console.error('Failed to submit feedback:', err)
+      throw err
     }
   }
 
+  // Удалить фидбек
+  async function removeFeedback(chatId) {
+    try {
+      await feedbackService.deleteFeedback(chatId)
+      delete feedbacks.value[chatId]
+    } catch (err) {
+      console.error('Failed to delete feedback:', err)
+      throw err
+    }
+  }
+
+  // Загрузить фидбек для чата
   async function loadFeedback(chatId) {
     try {
-      const result = await feedbackService.getFeedback(chatId);
-      if (result) feedbacks.value[chatId] = result;
+      const result = await feedbackService.getFeedback(chatId)
+      if (result) feedbacks.value[chatId] = result
     } catch (err) {
-      console.error('Failed to load feedback:', err);
+      console.error('Failed to load feedback:', err)
     }
   }
-
-
 
   // Загрузить историю чатов
   async function loadHistory(limit = 50) {
     if (!authStore.user) {
-      console.log('User not authenticated, skipping history load');
-      return;
+      console.log('User not authenticated, skipping history load')
+      return
     }
 
     try {
-      const data = await chatService.getHistory(limit); // ← исправлено
-      history.value = data || [];
-      console.log('Chat history loaded:', history.value.length, 'items');
+      const data = await chatService.getHistory(limit)
+      history.value = data || []
+      console.log('Chat history loaded:', history.value.length, 'items')
     } catch (err) {
-      console.error('Failed to load chat history:', err);
+      console.error('Failed to load chat history:', err)
     }
   }
-
 
   // Очистить текущий чат
   function clearChat() {
     messages.value = []
     error.value = null
+    currentChatId.value = null
   }
 
   return {
@@ -112,12 +130,14 @@ export const useChatStore = defineStore('chat', () => {
     isLoading,
     error,
     history,
-    feedbacks,        // добавить, если хотите использовать
+    currentChatId,
+    feedbacks,
     addMessage,
     sendQuestion,
     loadHistory,
     clearChat,
-    submitFeedback,   // добавить
-    loadFeedback      // добавить
+    submitFeedback,
+    removeFeedback,
+    loadFeedback
   }
 })
