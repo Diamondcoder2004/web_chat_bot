@@ -108,12 +108,12 @@
 import { ref, computed, onMounted } from 'vue'
 import Header from '../components/Header.vue'
 import Footer from '../components/Footer.vue'
-
-import { chatService } from '../services/supabase'
+import { useChatStore } from '../stores/chatStore'
 import { useAuthStore } from '../stores/authStore'
 import { supabase } from '../services/supabase'
 
 const authStore = useAuthStore()
+const chatStore = useChatStore()
 const question = ref('')
 const answer = ref('')
 const loading = ref(false)
@@ -228,13 +228,8 @@ async function askQuestion() {
   answer.value = ''
 
   try {
-    const response = await apiService.askQuestion(question.value)
+    const response = await chatStore.sendQuestion(question.value)
     answer.value = response.answer
-
-    // Сохраняем в историю
-    if (authStore.user) {
-      await chatService.saveChat(authStore.user.id, question.value, response.answer)
-    }
   } catch (error) {
     console.error('Ошибка:', error)
     answer.value = 'Произошла ошибка при получении ответа. Пожалуйста, попробуйте еще раз или проверьте подключение к интернету.'

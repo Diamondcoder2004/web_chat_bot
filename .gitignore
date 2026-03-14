@@ -9,49 +9,40 @@ build/
 target/
 
 # Dependencies
-node_modules/
 .venv/
 venv/
-.env
-.env.local
-.env.*
+node_modules/
+.julia/
+zig*/
 
 # Logs and temp files
 *.log
 *.tmp
 *.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.*
 
 # Editors
 .vscode/
 .idea/
+*.swx
 
-# Coverage
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Testing and coverage
+.coverage
 coverage/
 htmlcov/
-.coverage
-
-# Python specific
-*.pyc
-__pycache__/
-*.pyo
-*.pyd
-.Python
-*.so
-
-# Distribution / packaging
-.Python
-env/
-venv/
-ENV/
-.venv/
-.env/
-.envrc
-.pytest_cache/
 .mypy_cache/
-.tox/
-.coverage
+.pytest_cache/
 
-# Compressed files
+# Archives
 *.zip
 *.gz
 *.tar
