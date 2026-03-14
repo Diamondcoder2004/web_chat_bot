@@ -1,15 +1,21 @@
 import { createClient } from '@supabase/supabase-js'
 
 // Безопасно получаем переменные окружения
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321'
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'test-key'
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'http://localhost:8000'
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzczMjU1NjAwLCJleHAiOjE5MzEwMjIwMDB9.50mP01rS2HH53tuHsgQd7kg-Uc3OSQBeaHOkyejEPQQ'
 
 console.log('Supabase URL:', supabaseUrl)
 
 // Создаем клиент с обработкой ошибок
 let supabase = null
 try {
-  supabase = createClient(supabaseUrl, supabaseAnonKey)
+  supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true
+    }
+  })
   console.log('Supabase client created successfully')
 } catch (error) {
   console.error('Error creating Supabase client:', error)
@@ -18,6 +24,11 @@ try {
 // Функции для работы с аутентификацией
 export const authService = {
   async signUp(email, password, fullName) {
+    if (!supabase) {
+      console.warn('Supabase client not initialized')
+      return { data: null, error: 'Supabase not initialized' }
+    }
+
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -36,6 +47,11 @@ export const authService = {
   },
 
   async signIn(email, password) {
+    if (!supabase) {
+      console.warn('Supabase client not initialized')
+      return { data: null, error: 'Supabase not initialized' }
+    }
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -49,6 +65,11 @@ export const authService = {
   },
 
   async signOut() {
+    if (!supabase) {
+      console.warn('Supabase client not initialized')
+      return { error: 'Supabase not initialized' }
+    }
+
     try {
       const { error } = await supabase.auth.signOut()
       return { error }
@@ -59,6 +80,11 @@ export const authService = {
   },
 
   async getCurrentUser() {
+    if (!supabase) {
+      console.warn('Supabase client not initialized')
+      return null
+    }
+
     try {
       const { data: { user } } = await supabase.auth.getUser()
       return user
@@ -69,6 +95,11 @@ export const authService = {
   },
 
   async getSession() {
+    if (!supabase) {
+      console.warn('Supabase client not initialized')
+      return null
+    }
+
     try {
       const { data: { session } } = await supabase.auth.getSession()
       return session
@@ -79,54 +110,123 @@ export const authService = {
   }
 }
 
-// Функции для работы с историей чатов
-export const chatService = {
-  async saveChat(userId, question, answer) {
-    if (!supabase) {
-      console.warn('Supabase client not initialized')
-      return { data: null, error: 'Supabase not initialized' }
+export const feedbackService = {
+  async createFeedback(chatId, feedbackType, rating, comment) {
+    const session = await authService.getSession();
+    if (!session) throw new Error('Not authenticated');
+
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/feedback`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({
+        chat_id: chatId,
+        feedback_type: feedbackType,
+        rating,
+        comment
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Feedback error: ${error}`);
     }
 
-    try {
-      const { data, error } = await supabase
-        .from('chats')
-        .insert([
-          {
-            user_id: userId,
-            question,
-            answer,
-            created_at: new Date().toISOString()
-          }
-        ])
-        .select()
-      return { data, error }
-    } catch (error) {
-      console.error('Save chat error:', error)
-      return { data: null, error }
-    }
+    return response.json();
   },
 
-  async getChatHistory(userId) {
-    if (!supabase) {
-      console.warn('Supabase client not initialized')
-      return { data: null, error: 'Supabase not initialized' }
+  async getFeedback(chatId) {
+    const session = await authService.getSession();
+    if (!session) throw new Error('Not authenticated');
+
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/feedback/${chatId}`, {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      }
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      const error = await response.text();
+      throw new Error(`Feedback error: ${error}`);
     }
 
-    try {
-      const { data, error } = await supabase
-        .from('chats')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(50)
-      return { data, error }
-    } catch (error) {
-      console.error('Get chat history error:', error)
-      return { data: null, error }
+    return response.json();
+  },
+
+  async deleteFeedback(chatId) {
+    const session = await authService.getSession();
+    if (!session) throw new Error('Not authenticated');
+
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/feedback/${chatId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      }
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Feedback error: ${error}`);
     }
+
+    return response.json();
+  }
+};
+
+
+// Функции для работы с историей чатов (через FastAPI, а не Supabase)
+export const chatService = {
+  async sendQuery(query, params = {}) {
+    const session = await authService.getSession();
+    if (!session) throw new Error('Not authenticated');
+
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/query`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({
+        query,
+        k: params.k || 30,
+        rerank_top_k: params.rerank_top_k || 3,
+        temperature: params.temperature || 0.8,
+        max_tokens: params.max_tokens || 2000,
+        min_score: params.min_score || 0.0
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`API error: ${error}`);
+    }
+
+    return response.json();
+  },
+
+  async getHistory(limit = 50) {
+    const session = await authService.getSession();
+    if (!session) throw new Error('Not authenticated');
+
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/history?limit=${limit}`, {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      }
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`API error: ${error}`);
+    }
+
+    return response.json();
   }
 }
-// Функции для работы с профилем
+
+// Функции для работы с профилем (используем таблицу profiles в Supabase)
 export const profileService = {
   async getProfile(userId) {
     if (!supabase) {
@@ -140,6 +240,13 @@ export const profileService = {
         .select('*')
         .eq('id', userId)
         .single()
+
+      // Если таблицы нет, создадим её автоматически через API позже
+      if (error && error.code === '42P01') { // relation does not exist
+        console.warn('Profiles table does not exist. Create it in Supabase Studio.');
+        return { data: null, error: 'Profiles table not created yet' }
+      }
+
       return { data, error }
     } catch (error) {
       console.error('Get profile error:', error)
@@ -166,6 +273,33 @@ export const profileService = {
       return { data, error }
     } catch (error) {
       console.error('Update profile error:', error)
+      return { data: null, error }
+    }
+  },
+
+  // Создание профиля при регистрации
+  async createProfile(userId, fullName) {
+    if (!supabase) {
+      console.warn('Supabase client not initialized')
+      return { data: null, error: 'Supabase not initialized' }
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .insert([
+          {
+            id: userId,
+            full_name: fullName,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        ])
+        .select()
+        .single()
+      return { data, error }
+    } catch (error) {
+      console.error('Create profile error:', error)
       return { data: null, error }
     }
   }
