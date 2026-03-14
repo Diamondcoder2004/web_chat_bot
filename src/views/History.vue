@@ -59,7 +59,7 @@ async function loadHistory() {
 
   loading.value = true
   try {
-    const { data } = await chatService.getChatHistory(authStore.user.id)
+    const data = await chatService.getHistory(50)
     chats.value = data || []
     filteredChats.value = chats.value
   } catch (error) {
