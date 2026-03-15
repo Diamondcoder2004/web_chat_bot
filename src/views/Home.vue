@@ -4,7 +4,7 @@
 
     <div class="main-layout">
       <!-- Левая колонка: быстрые шаблоны и FAQ -->
-      <aside class="sidebar">
+      <aside class="sidebar-left">
         <!-- Быстрые шаблоны -->
         <div class="quick-templates">
           <h3>Быстрые вопросы</h3>
@@ -18,43 +18,8 @@
           </div>
         </div>
 
-        <!-- FAQ -->
-        <div class="faq-section">
-          <h3>Частые вопросы</h3>
-          <div class="faq-search">
-            <input
-              v-model="faqSearch"
-              type="text"
-              placeholder="Поиск в FAQ..."
-            />
-          </div>
-          <div class="faq-list">
-            <div v-if="faqLoading" class="faq-loading">Загрузка FAQ...</div>
-            <div v-else-if="filteredFaq.length === 0" class="faq-empty">Нет вопросов</div>
-            <div v-else>
-              <div
-                v-for="item in displayedFaq"
-                :key="item.id"
-                class="faq-item"
-              >
-                <div class="faq-question" @click="toggleFaq(item.id)">
-                  <span>{{ item.question }}</span>
-                  <span class="faq-toggle">{{ openFaqId === item.id ? '−' : '+' }}</span>
-                </div>
-                <div v-if="openFaqId === item.id" class="faq-answer">
-                  {{ item.answer }}
-                </div>
-              </div>
-              <button
-                v-if="filteredFaq.length > 5 && !showAllFaq"
-                @click="showAllFaq = true"
-                class="faq-show-more"
-              >
-                Показать все ({{ filteredFaq.length }})
-              </button>
-            </div>
-          </div>
-        </div>
+        <!-- FAQ (используем обновленный FaqSeqtion) -->
+        <FaqSeqtion />
       </aside>
 
       <!-- Основная область чата -->
@@ -77,47 +42,13 @@
             <div class="message-bubble">
               <div class="message-content">{{ msg.content }}</div>
 
-              <!-- Источники (только для ассистента) -->
-              <div v-if="msg.role === 'assistant' && msg.sources?.length" class="sources">
-                <div class="sources-title">Источники:</div>
-                <div class="source-cards">
-                  <div
-                    v-for="(src, idx) in msg.sources.slice(0, 3)"
-                    :key="idx"
-                    class="source-card"
-                    @click="openSourceModal(src)"
-                  >
-                    <div class="source-header">
-                      <span class="source-filename">{{ truncate(src.filename, 20) }}</span>
-                      <button class="source-detail-btn" @click.stop="openSourceModal(src)">🔍</button>
-                    </div>
-                    <div class="source-breadcrumbs">{{ src.breadcrumbs || '—' }}</div>
-                    <div class="source-summary">{{ truncate(src.summary, 80) }}</div>
-                    <div class="source-content-preview" v-if="src.content">
-                      {{ truncate(src.content, 120) }}
-                    </div>
-                    <div class="source-scores">
-                      <span title="Гибридная оценка">🔹 {{ src.score_hybrid?.toFixed(2) }}</span>
-                      <span title="Оценка реранкера">⭐ {{ src.score_rerank?.toFixed(2) }}</span>
-                    </div>
-                  </div>
-                  <div
-                    v-if="msg.sources.length > 3"
-                    class="source-card more"
-                    @click="showAllSources(msg)"
-                  >
-                    +{{ msg.sources.length - 3 }} ещё
-                  </div>
-                </div>
-              </div>
-
               <!-- Фидбек (только для ассистента) -->
               <div v-if="msg.role === 'assistant' && msg.sessionId" class="feedback">
                 <button
                   class="feedback-btn"
                   :class="{ active: chatStore.feedbacks[msg.sessionId]?.feedback_type === 'like' }"
                   @click="handleFeedback(msg.sessionId, 'like')"
-                  title="Нравится"
+                  title="Полезно"
                 >
                   👍
                 </button>
@@ -125,7 +56,7 @@
                   class="feedback-btn"
                   :class="{ active: chatStore.feedbacks[msg.sessionId]?.feedback_type === 'dislike' }"
                   @click="handleFeedback(msg.sessionId, 'dislike')"
-                  title="Не нравится"
+                  title="Не полезно"
                 >
                   👎
                 </button>
@@ -145,36 +76,33 @@
           </div>
         </div>
 
-        <!-- Поле ввода с параметрами -->
+        <!-- Панель настроек и поле ввода -->
         <div class="input-wrapper">
-          <div class="input-toolbar">
-            <button @click="toggleOptions" class="toolbar-btn">⚙️</button>
-          </div>
-          <div v-if="showOptions" class="options-panel">
-            <div class="option-row">
-              <span>k (кол-во документов):</span>
-              <input type="range" v-model.number="searchParams.k" min="5" max="50" step="1" />
-              <span class="option-value">{{ searchParams.k }}</span>
-            </div>
-            <div class="option-row">
-              <span>Ранжирование топ:</span>
-              <input type="range" v-model.number="searchParams.rerank_top_k" min="1" max="10" step="1" />
-              <span class="option-value">{{ searchParams.rerank_top_k }}</span>
-            </div>
-            <div class="option-row">
-              <span>Температура:</span>
-              <input type="range" v-model.number="searchParams.temperature" min="0" max="1.5" step="0.1" />
-              <span class="option-value">{{ searchParams.temperature.toFixed(1) }}</span>
-            </div>
-            <div class="option-row">
-              <span>Макс. токенов:</span>
-              <input type="range" v-model.number="searchParams.max_tokens" min="500" max="4000" step="100" />
-              <span class="option-value">{{ searchParams.max_tokens }}</span>
-            </div>
-            <div class="option-row">
-              <span>Мин. оценка:</span>
-              <input type="range" v-model.number="searchParams.min_score" min="0" max="1" step="0.05" />
-              <span class="option-value">{{ searchParams.min_score.toFixed(2) }}</span>
+          <div class="settings-panel">
+            <button @click="showSettings = !showSettings" class="settings-toggle">
+              ⚙️ Параметры поиска
+            </button>
+            <div v-if="showSettings" class="settings-content">
+              <div class="setting-row">
+                <label>Кол-во документов (k): {{ searchParams.k }}</label>
+                <input type="range" v-model.number="searchParams.k" min="5" max="50" step="1" />
+              </div>
+              <div class="setting-row">
+                <label>Топ после реранка: {{ searchParams.rerank_top_k }}</label>
+                <input type="range" v-model.number="searchParams.rerank_top_k" min="1" max="10" step="1" />
+              </div>
+              <div class="setting-row">
+                <label>Температура: {{ searchParams.temperature.toFixed(1) }}</label>
+                <input type="range" v-model.number="searchParams.temperature" min="0" max="1.5" step="0.1" />
+              </div>
+              <div class="setting-row">
+                <label>Макс. токенов: {{ searchParams.max_tokens }}</label>
+                <input type="range" v-model.number="searchParams.max_tokens" min="500" max="4000" step="100" />
+              </div>
+              <div class="setting-row">
+                <label>Мин. оценка: {{ searchParams.min_score.toFixed(2) }}</label>
+                <input type="range" v-model.number="searchParams.min_score" min="0" max="1" step="0.05" />
+              </div>
             </div>
           </div>
           <div class="input-area">
@@ -190,6 +118,67 @@
           </div>
         </div>
       </main>
+
+      <!-- Правая колонка: источники -->
+      <!-- Правая колонка: источники с деталями -->
+      <aside class="sidebar-right" v-if="currentSources.length > 0">
+        <div class="sources-panel">
+          <h3>📚 Источники ответа</h3>
+          <div class="sources-list">
+            <div
+              v-for="(source, idx) in currentSources"
+              :key="idx"
+              class="source-card-detailed"
+              @click="openSourceModal(source)"
+            >
+              <div class="source-header">
+                <span class="source-number">{{ idx + 1 }}</span>
+                <span class="source-filename">{{ truncate(source.filename, 35) }}</span>
+              </div>
+
+              <div class="source-breadcrumbs" v-if="source.breadcrumbs">
+                <span class="badge">📌 Раздел:</span> {{ source.breadcrumbs }}
+              </div>
+
+              <div class="source-content-preview" v-if="source.content">
+                <span class="badge">📄 Содержание:</span>
+                <p class="preview-text">{{ truncate(source.content, 150) }}</p>
+              </div>
+
+              <div class="source-summary" v-if="source.summary">
+                <span class="badge">📝 Кратко:</span>
+                <p class="preview-text">{{ truncate(source.summary, 120) }}</p>
+              </div>
+
+              <div class="source-metadata">
+          <span class="metadata-item" v-if="source.category">
+            <span class="badge">🏷️ Категория:</span> {{ source.category }}
+          </span>
+              </div>
+
+              <div class="source-scores-detailed">
+                <div class="score-item hybrid" :title="`Гибридная оценка: ${(source.score_hybrid * 100).toFixed(2)}%`">
+                  <span class="score-label">Hybrid</span>
+                  <span class="score-value">{{ (source.score_hybrid * 100).toFixed(0) }}%</span>
+                </div>
+                <div class="score-item rerank" :title="`Оценка реранкера: ${(source.score_rerank * 100).toFixed(2)}%`">
+                  <span class="score-label">Rerank</span>
+                  <span class="score-value">{{ (source.score_rerank * 100).toFixed(0) }}%</span>
+                </div>
+                <div class="score-item bm25" v-if="source.score_bm25" :title="`BM25: ${(source.score_bm25 * 100).toFixed(2)}%`">
+                  <span class="score-label">BM25</span>
+                  <span class="score-value">{{ (source.score_bm25 * 100).toFixed(0) }}%</span>
+                </div>
+              </div>
+
+              <div class="source-footer">
+                <span class="chunk-id" v-if="source.chunk_id">ID: {{ truncate(source.chunk_id, 10) }}</span>
+                <span class="click-hint">👆 Подробнее</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
     </div>
 
     <Footer />
@@ -203,10 +192,10 @@
         <p><strong>Кратко:</strong> {{ selectedSource.summary }}</p>
         <p><strong>Оценки:</strong></p>
         <ul>
-          <li>Гибридная: {{ selectedSource.score_hybrid?.toFixed(3) }}</li>
-          <li>Реранк: {{ selectedSource.score_rerank?.toFixed(3) }}</li>
-          <li>BM25: {{ selectedSource.score_bm25?.toFixed(3) }}</li>
-          <li>Hype: {{ selectedSource.score_hype?.toFixed(3) }}</li>
+          <li>Гибридная: {{ (selectedSource.score_hybrid * 100).toFixed(2) }}%</li>
+          <li>Реранк: {{ (selectedSource.score_rerank * 100).toFixed(2) }}%</li>
+          <li>BM25: {{ (selectedSource.score_bm25 * 100).toFixed(2) }}%</li>
+          <li>Hype: {{ (selectedSource.score_hype * 100).toFixed(2) }}%</li>
         </ul>
         <button @click="selectedSource = null">Закрыть</button>
       </div>
@@ -241,9 +230,9 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import Header from '../components/Header.vue'
 import Footer from '../components/Footer.vue'
+import FaqSeqtion from '../components/FaqSeqtion.vue'
 import { useChatStore } from '../stores/chatStore'
 import { useAuthStore } from '../stores/authStore'
-import { supabase } from '../services/supabase'
 
 const authStore = useAuthStore()
 const chatStore = useChatStore()
@@ -252,7 +241,7 @@ const chatStore = useChatStore()
 const newMessage = ref('')
 const messagesContainer = ref(null)
 
-// Параметры поиска (значения по умолчанию)
+// Параметры поиска
 const searchParams = ref({
   k: 30,
   rerank_top_k: 3,
@@ -261,8 +250,8 @@ const searchParams = ref({
   min_score: 0.0
 })
 
-// Видимость панели параметров
-const showOptions = ref(false)
+// Видимость панели настроек
+const showSettings = ref(false)
 
 // Модальные окна
 const selectedSource = ref(null)
@@ -270,80 +259,13 @@ const showStarRating = ref(false)
 const tempStarRating = ref(0)
 const currentFeedbackSessionId = ref(null)
 
-// FAQ
-const faqSearch = ref('')
-const openFaqId = ref(null)
-const faqData = ref([])
-const faqLoading = ref(false)
-const showAllFaq = ref(false)
-
-// Фильтрация FAQ
-const filteredFaq = computed(() => {
-  if (!faqSearch.value.trim()) return faqData.value
-  const q = faqSearch.value.toLowerCase()
-  return faqData.value.filter(item =>
-    item.question.toLowerCase().includes(q) || item.answer.toLowerCase().includes(q)
-  )
+// Текущие источники (из последнего сообщения ассистента)
+const currentSources = computed(() => {
+  const lastAssistant = [...chatStore.messages]
+    .reverse()
+    .find(m => m.role === 'assistant')
+  return lastAssistant?.sources || []
 })
-
-// Отображаемые вопросы (первые 5 или все)
-const displayedFaq = computed(() => {
-  if (showAllFaq.value) return filteredFaq.value
-  return filteredFaq.value.slice(0, 5)
-})
-
-// Загрузка FAQ из CSV
-async function loadFaq() {
-  faqLoading.value = true
-  try {
-    const { data, error } = await supabase.storage
-      .from('df')
-      .download('faq_question.csv')
-    if (error) throw error
-    const text = await data.text()
-    faqData.value = parseCsv(text)
-  } catch (err) {
-    console.error('Ошибка загрузки FAQ:', err)
-    faqData.value = getDefaultFaq()
-  } finally {
-    faqLoading.value = false
-  }
-}
-
-function parseCsv(csv) {
-  const lines = csv.split('\n')
-  const result = []
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim()
-    if (!line) continue
-    const parts = line.split(',')
-    if (parts.length >= 2) {
-      result.push({
-        id: i,
-        question: parts[0].replace(/^"|"$/g, '').trim(),
-        answer: parts.slice(1).join(',').replace(/^"|"$/g, '').trim()
-      })
-    }
-  }
-  return result
-}
-
-function getDefaultFaq() {
-  return [
-    { id: 1, question: 'Как подать заявку на подключение?', answer: 'Заявку можно подать через личный кабинет или в офисе.' },
-    { id: 2, question: 'Какие документы нужны?', answer: 'Паспорт, ИНН, документы на участок.' }
-  ]
-}
-
-function toggleFaq(id) {
-  openFaqId.value = openFaqId.value === id ? null : id
-}
-
-// Вспомогательная функция обрезки текста
-const truncate = (text, length) => {
-  if (!text) return ''
-  return text.length > length ? text.slice(0, length) + '...' : text
-}
 
 // Использование шаблона
 function useTemplate(topic) {
@@ -379,33 +301,46 @@ function handleNewChat() {
   newMessage.value = ''
 }
 
-// Переключение панели параметров
-function toggleOptions() {
-  showOptions.value = !showOptions.value
-}
-
 // Фидбек
 async function handleFeedback(sessionId, type) {
-  if (!sessionId) return
+  if (!sessionId) {
+    console.warn('Нет sessionId для фидбека')
+    return
+  }
+
   const current = chatStore.feedbacks[sessionId]
-  if (current?.feedback_type === type) {
-    await chatStore.removeFeedback(sessionId)
-  } else {
-    await chatStore.submitFeedback(sessionId, type)
+  try {
+    if (current?.feedback_type === type) {
+      await chatStore.removeFeedback(sessionId)
+    } else {
+      await chatStore.submitFeedback(sessionId, type)
+    }
+  } catch (err) {
+    console.error('Ошибка фидбека:', err)
+    alert('Не удалось отправить оценку. Попробуйте позже.')
   }
 }
 
 function openStarRating(sessionId) {
+  if (!sessionId) {
+    console.warn('Нет sessionId для звёздного рейтинга')
+    return
+  }
   currentFeedbackSessionId.value = sessionId
   showStarRating.value = true
 }
 
 async function submitStarRating(rating) {
   if (!currentFeedbackSessionId.value || rating < 1) return
-  await chatStore.submitFeedback(currentFeedbackSessionId.value, 'star', rating)
-  showStarRating.value = false
-  tempStarRating.value = 0
-  currentFeedbackSessionId.value = null
+  try {
+    await chatStore.submitFeedback(currentFeedbackSessionId.value, 'star', rating)
+    showStarRating.value = false
+    tempStarRating.value = 0
+    currentFeedbackSessionId.value = null
+  } catch (err) {
+    console.error('Ошибка звёздного рейтинга:', err)
+    alert('Не удалось отправить оценку.')
+  }
 }
 
 // Модалка с деталями источника
@@ -413,16 +348,18 @@ function openSourceModal(source) {
   selectedSource.value = source
 }
 
-function showAllSources(msg) {
-  // Можно показать все источники в модалке, например:
-  selectedSource.value = { ...msg.sources[0], all: true } // упрощённо
+// Вспомогательная функция обрезки текста
+const truncate = (text, length) => {
+  if (!text) return ''
+  return text.length > length ? text.slice(0, length) + '...' : text
 }
 
-// При монтировании загружаем FAQ и устанавливаем автоскролл
-onMounted(async () => {
-  await loadFaq()
-  watch(() => chatStore.messages.length, scrollToBottom, { flush: 'post' })
-})
+
+
+
+
+// Автоскролл при новых сообщениях
+watch(() => chatStore.messages.length, scrollToBottom, { flush: 'post' })
 </script>
 
 <style scoped>
@@ -430,39 +367,72 @@ onMounted(async () => {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .main-layout {
   display: flex;
   flex: 1;
-  height: calc(100vh - 140px); /* Подогнать под Header и Footer */
+  min-height: 0;  /* Важно для правильной работы flex-детей */
+  height: calc(100vh - 140px); /* Высота с учётом Header и Footer */
+  overflow: hidden;
 }
 
-.sidebar {
-  width: 300px;
+/* Левая колонка с прокруткой */
+.sidebar-left {
+  width: 420px;
   background: #f8f9fa;
   border-right: 1px solid #ddd;
   padding: 20px;
-  overflow-y: auto;
+  overflow-y: auto;  /* Включаем вертикальную прокрутку */
   flex-shrink: 0;
+  height: 100%;      /* Занимает всю высоту родителя */
 }
 
+/* Центральная колонка (чат) */
 .chat-area {
   flex: 1;
   display: flex;
   flex-direction: column;
   background: white;
-  height: 100%;
   max-width: 900px;
   margin: 0 auto;
   width: 100%;
+  min-width: 0;      /* Предотвращает переполнение */
+  height: 100%;
+  overflow: hidden;  /* Скрываем переполнение, прокрутка будет внутри сообщений */
 }
 
+/* Правая колонка (источники) */
+.sidebar-right {
+  width: 320px;
+  background: #ffffff;
+  border-left: 1px solid #ddd;
+  padding: 20px;
+  overflow-y: auto;  /* Тоже с прокруткой, если источников много */
+  flex-shrink: 0;
+  height: 100%;
+}
+
+/* Контейнер сообщений с прокруткой */
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  min-height: 0;
+}
+
+/* Остальные стили остаются без изменений */
 .chat-header {
   padding: 10px 20px;
   border-bottom: 1px solid #ddd;
   display: flex;
   justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 .new-chat-btn {
@@ -485,15 +455,6 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 
-.messages-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
 .message {
   display: flex;
   margin-bottom: 10px;
@@ -508,7 +469,7 @@ onMounted(async () => {
 }
 
 .message-bubble {
-  max-width: 70%;
+  max-width: 80%;
   padding: 12px 16px;
   border-radius: 18px;
   background: #f1f1f1;
@@ -534,112 +495,6 @@ onMounted(async () => {
 .typing {
   font-style: italic;
   color: #666;
-}
-
-/* Источники */
-.sources {
-  margin-top: 10px;
-  border-top: 1px solid rgba(0,0,0,0.1);
-  padding-top: 10px;
-}
-
-.sources-title {
-  font-size: 12px;
-  font-weight: 500;
-  color: #666;
-  margin-bottom: 8px;
-}
-
-.source-cards {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.source-card {
-  background: white;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 8px;
-  font-size: 12px;
-  cursor: pointer;
-  width: calc(33% - 6px);
-  transition: all 0.2s;
-}
-
-.source-card:hover {
-  border-color: #0066cc;
-  box-shadow: 0 2px 8px rgba(0,102,204,0.1);
-}
-
-.source-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.source-filename {
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.source-detail-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 0;
-  color: #666;
-}
-
-.source-breadcrumbs {
-  color: #888;
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-bottom: 4px;
-}
-
-.source-summary {
-  color: #333;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  margin: 4px 0;
-}
-
-.source-content-preview {
-  color: #666;
-  font-size: 11px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  margin: 4px 0;
-  padding: 4px;
-  background: #f5f5f5;
-  border-radius: 4px;
-}
-
-.source-scores {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: #888;
-  margin-top: 4px;
-}
-
-.source-card.more {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f1f1f1;
-  font-weight: 500;
 }
 
 /* Фидбек */
@@ -673,55 +528,51 @@ onMounted(async () => {
   font-size: 22px;
 }
 
-/* Поле ввода и параметры */
+/* Панель настроек */
 .input-wrapper {
   padding: 16px;
   background: #fff;
   border-top: 1px solid #ddd;
+  flex-shrink: 0;
 }
 
-.input-toolbar {
-  display: flex;
-  margin-bottom: 8px;
-}
-
-.toolbar-btn {
-  background: none;
-  border: none;
-  font-size: 20px;
-  cursor: pointer;
-  padding: 4px 8px;
-}
-
-.options-panel {
-  background: #f9f9f9;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 12px;
+.settings-panel {
   margin-bottom: 12px;
 }
 
-.option-row {
-  display: flex;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.option-row span:first-child {
-  width: 140px;
+.settings-toggle {
+  width: 100%;
+  padding: 10px;
+  background: #e3f2fd;
+  border: 1px solid #0066cc;
+  color: #0066cc;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
   font-size: 14px;
 }
 
-.option-row input {
-  flex: 1;
-  margin: 0 8px;
+.settings-content {
+  background: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
+  margin-top: 10px;
 }
 
-.option-value {
-  width: 40px;
-  text-align: right;
-  font-size: 14px;
-  color: #666;
+.setting-row {
+  margin-bottom: 12px;
+}
+
+.setting-row label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 13px;
+  color: #333;
+}
+
+.setting-row input[type=range] {
+  width: 100%;
 }
 
 .input-area {
@@ -759,8 +610,99 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 
+/* Источники в правой панели */
+.sources-panel h3 {
+  font-size: 16px;
+  color: #003366;
+  margin-bottom: 15px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e0e7ff;
+}
+
+.sources-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.source-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: #f9f9f9;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.source-item:hover {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  transform: translateX(2px);
+}
+
+.source-number {
+  width: 28px;
+  height: 28px;
+  background: #0066cc;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.source-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.source-filename {
+  font-weight: 600;
+  font-size: 14px;
+  color: #1f2937;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source-breadcrumbs {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source-scores {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.score {
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.score.hybrid {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.score.rerank {
+  background: #f3e8ff;
+  color: #6b21a8;
+}
+
 /* Быстрые шаблоны */
-.quick-templates h3, .faq-section h3 {
+.quick-templates h3 {
   margin-bottom: 10px;
   font-size: 16px;
   color: #003366;
@@ -770,6 +712,7 @@ onMounted(async () => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-bottom: 25px;
 }
 
 .templates button {
@@ -781,55 +724,12 @@ onMounted(async () => {
   font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
+  transition: all 0.2s;
 }
 
-/* FAQ */
-.faq-search input {
-  width: 100%;
-  padding: 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  margin-bottom: 10px;
-}
-
-.faq-item {
-  border-bottom: 1px solid #eee;
-}
-
-.faq-question {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 0;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.faq-question:hover {
-  color: #0066cc;
-}
-
-.faq-toggle {
-  font-weight: bold;
-  color: #0066cc;
-}
-
-.faq-answer {
-  padding: 10px;
-  background: #f9f9f9;
-  border-radius: 4px;
-  font-size: 13px;
-  margin-bottom: 10px;
-}
-
-.faq-show-more {
-  width: 100%;
-  padding: 8px;
-  background: none;
-  border: 1px dashed #0066cc;
-  color: #0066cc;
-  border-radius: 4px;
-  margin-top: 10px;
-  cursor: pointer;
+.templates button:hover {
+  background: #0066cc;
+  color: white;
 }
 
 /* Модальные окна */
@@ -884,5 +784,189 @@ onMounted(async () => {
   display: flex;
   gap: 10px;
   justify-content: flex-end;
+}
+
+/* Адаптивность */
+@media (max-width: 1200px) {
+  .sidebar-right {
+    width: 280px;
+  }
+}
+
+@media (max-width: 992px) {
+  .sidebar-right {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .sidebar-left {
+    display: none;
+  }
+
+  .chat-area {
+    max-width: 100%;
+  }
+}
+
+
+/* Улучшенные карточки источников */
+.sources-panel h3 {
+  font-size: 18px;
+  color: #003366;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #e0e7ff;
+}
+
+.sources-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.source-card-detailed {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.source-card-detailed:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 8px 16px rgba(59, 130, 246, 0.15);
+  transform: translateY(-2px);
+}
+
+.source-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 8px;
+}
+
+.source-number {
+  width: 28px;
+  height: 28px;
+  background: #0066cc;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.source-filename {
+  font-weight: 600;
+  font-size: 15px;
+  color: #1f2937;
+  flex: 1;
+  word-break: break-word;
+}
+
+.badge {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.source-breadcrumbs,
+.source-content-preview,
+.source-summary,
+.source-metadata {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #374151;
+}
+
+.preview-text {
+  margin: 4px 0 0 0;
+  color: #4b5563;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.source-scores-detailed {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.score-item {
+  flex: 1;
+  min-width: 60px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 11px;
+}
+
+.score-item.hybrid {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.score-item.rerank {
+  background: #f3e8ff;
+  color: #6b21a8;
+}
+
+.score-item.bm25 {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.score-label {
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+
+.score-value {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.source-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #9ca3af;
+  border-top: 1px solid #f0f0f0;
+  padding-top: 8px;
+}
+
+.chunk-id {
+  font-family: monospace;
+  background: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.click-hint {
+  color: #3b82f6;
+  font-weight: 500;
 }
 </style>

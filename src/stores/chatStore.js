@@ -14,17 +14,17 @@ export const useChatStore = defineStore('chat', () => {
   const authStore = useAuthStore()
 
   // Добавить сообщение в локальный список
+// Добавить сообщение в локальный список
   function addMessage(role, content, sources = [], msgSessionId = null) {
     messages.value.push({
       id: Date.now(),
       role,
       content,
       sources,
-      sessionId: msgSessionId,
+      sessionId: msgSessionId,  // ← это поле должно совпадать с тем, что используется в шаблоне
       timestamp: new Date()
     })
   }
-
   // Начать новый чат (очистить всё и сбросить sessionId)
   function newChat() {
     messages.value = []
