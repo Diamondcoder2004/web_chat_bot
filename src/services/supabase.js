@@ -102,6 +102,10 @@ export const authService = {
 
     try {
       const { data: { session } } = await supabase.auth.getSession()
+      console.log('Session from Supabase:', session ? '✅ exists' : '❌ null')
+      if (session) {
+        console.log('Token preview:', session.access_token.substring(0, 20) + '...')
+      }
       return session
     } catch (error) {
       console.error('Get session error:', error)
@@ -110,6 +114,7 @@ export const authService = {
   }
 }
 
+// Сервис для работы с фидбеком (через FastAPI)
 export const feedbackService = {
   async createFeedback(chatId, feedbackType, rating, comment) {
     const session = await authService.getSession();
@@ -176,12 +181,14 @@ export const feedbackService = {
   }
 };
 
-
-// Функции для работы с историей чатов (через FastAPI, а не Supabase)
+// Сервис для работы с чатами (FastAPI)
 export const chatService = {
   async sendQuery(query, params = {}) {
     const session = await authService.getSession();
+    console.log('Session in sendQuery:', session ? '✅' : '❌');
     if (!session) throw new Error('Not authenticated');
+
+    console.log('Sending token:', session.access_token.substring(0, 20) + '...');
 
     const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/query`, {
       method: 'POST',
@@ -195,12 +202,16 @@ export const chatService = {
         rerank_top_k: params.rerank_top_k || 3,
         temperature: params.temperature || 0.8,
         max_tokens: params.max_tokens || 2000,
-        min_score: params.min_score || 0.0
+        min_score: params.min_score || 0.0,
+        session_id: params.session_id || null
       })
     });
 
+    console.log('Response status:', response.status);
+
     if (!response.ok) {
       const error = await response.text();
+      console.error('API error response:', error);
       throw new Error(`API error: ${error}`);
     }
 
@@ -224,9 +235,9 @@ export const chatService = {
 
     return response.json();
   }
-}
+};
 
-// Функции для работы с профилем (используем таблицу profiles в Supabase)
+// Сервис для работы с профилем (Supabase напрямую)
 export const profileService = {
   async getProfile(userId) {
     if (!supabase) {
@@ -242,7 +253,7 @@ export const profileService = {
         .single()
 
       // Если таблицы нет, создадим её автоматически через API позже
-      if (error && error.code === '42P01') { // relation does not exist
+      if (error && error.code === '42P01') {
         console.warn('Profiles table does not exist. Create it in Supabase Studio.');
         return { data: null, error: 'Profiles table not created yet' }
       }
@@ -277,7 +288,6 @@ export const profileService = {
     }
   },
 
-  // Создание профиля при регистрации
   async createProfile(userId, fullName) {
     if (!supabase) {
       console.warn('Supabase client not initialized')

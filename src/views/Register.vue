@@ -17,21 +17,33 @@
           </div>
 
           <div v-if="success" class="success-message">
-            Регистрация успешна! Теперь вы можете войти.
+            Регистрация успешна! Выполняется вход...
           </div>
 
           <!-- Поля формы -->
-          <div class="form-group">
-            <label for="fullName">ФИО *</label>
-            <input
-              id="fullName"
-              v-model="form.fullName"
-              type="text"
-              required
-              placeholder="Иванов Иван Иванович"
-              :disabled="loading"
-            >
-          </div>
+            <div class="form-group">
+              <label for="firstName">Имя *</label>
+              <input
+                id="firstName"
+                v-model="form.firstName"
+                type="text"
+                required
+                placeholder="Иван"
+                :disabled="loading"
+              >
+            </div>
+
+            <div class="form-group">
+              <label for="lastName">Фамилия *</label>
+              <input
+                id="lastName"
+                v-model="form.lastName"
+                type="text"
+                required
+                placeholder="Иванов"
+                :disabled="loading"
+              >
+            </div>
 
           <div class="form-group">
             <label for="email">Email *</label>
@@ -91,7 +103,8 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const form = ref({
-  fullName: '',
+  firstName: '',
+  lastName: '',
   email: '',
   password: '',
   confirmPassword: ''
@@ -112,39 +125,48 @@ async function handleRegister() {
     return
   }
 
+  if (!form.value.firstName.trim() || !form.value.lastName.trim()) {
+    error.value = 'Имя и фамилия обязательны для заполнения'
+    return
+  }
+
   loading.value = true
   error.value = ''
 
   try {
+    // Сохраняем данные для входа
+    const email = form.value.email
+    const password = form.value.password
+
+    // Формируем полное имя для метаданных
+    const fullName = `${form.value.firstName} ${form.value.lastName}`.trim()
+
     const result = await authStore.register(
-      form.value.email,
-      form.value.password,
-      form.value.fullName
+      email,
+      password,
+      fullName  // Передаем полное имя в метаданные
     )
 
     if (result.success) {
       success.value = true
-      // Очистка формы
-      form.value = {
-        fullName: '',
-        email: '',
-        password: '',
-        confirmPassword: ''
-      }
 
-      // Автоматический вход после регистрации
-      setTimeout(async () => {
-        const loginResult = await authStore.login(form.value.email, form.value.password)
-        if (loginResult.success) {
+      // Пытаемся залогиниться
+      const loginResult = await authStore.login(email, password)
+
+      if (loginResult.success) {
+        // Даем время на создание профиля
+        setTimeout(() => {
           router.push('/')
-        }
-      }, 1500)
+        }, 1000)
+      } else {
+        setTimeout(() => router.push('/login'), 2000)
+      }
     } else {
       error.value = result.error || 'Ошибка регистрации'
     }
   } catch (err) {
+    console.error('Registration error:', err)
     error.value = 'Произошла ошибка при регистрации'
-    console.error(err)
   } finally {
     loading.value = false
   }
@@ -199,6 +221,15 @@ async function handleRegister() {
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.form-row {
+  display: flex;
+  gap: 15px;
+}
+
+.form-row .form-group {
+  flex: 1;
 }
 
 .form-group {
@@ -291,16 +322,6 @@ async function handleRegister() {
   text-decoration: underline;
 }
 
-.back-link {
-  display: inline-block;
-  color: #666;
-  font-size: 14px;
-}
-
-.back-link:hover {
-  color: #0066cc;
-}
-
 @media (max-width: 480px) {
   .register-card {
     padding: 30px 20px;
@@ -308,6 +329,11 @@ async function handleRegister() {
 
   .form-header h1 {
     font-size: 24px;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 20px;
   }
 }
 </style>

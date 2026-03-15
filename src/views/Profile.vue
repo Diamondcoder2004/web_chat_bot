@@ -208,7 +208,7 @@ async function saveProfile() {
 
     if (result.success) {
       // Обновляем локальные данные
-      profile.value = {
+      profile.value = result.data || {
         ...profile.value,
         ...editData.value
       }
@@ -219,7 +219,7 @@ async function saveProfile() {
     }
   } catch (error) {
     console.error('Ошибка сохранения профиля:', error)
-    alert('Произошла ошибка при сохранении')
+    alert('Произошла ошибка при сохранении: ' + error.message)
   } finally {
     saveLoading.value = false
   }

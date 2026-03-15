@@ -1,8 +1,8 @@
 <template>
   <footer class="footer">
     <div class="container">
-      <p>© 2024 AI Ассистент Башкирэнерго</p>
-      <p>Для связи: support@bashkirenergo.local</p>
+      <p>2026 Интеллектуальный Ассистент Башкирэнерго</p>
+      <p>Для связи: almaz_sabitov04@mail.ru</p>
     </div>
   </footer>
 </template>

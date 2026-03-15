@@ -8,21 +8,28 @@ export const useChatStore = defineStore('chat', () => {
   const isLoading = ref(false)
   const error = ref(null)
   const history = ref([])
-  const currentChatId = ref(null) // Добавлено для хранения ID текущего чата
-  const feedbacks = ref({}) // key: chatId, value: feedback object
-  
+  const sessionId = ref(null)               // идентификатор текущего диалога
+  const feedbacks = ref({})                  // key: chatId, value: feedback object
+
   const authStore = useAuthStore()
 
-  // Добавить сообщение
-  function addMessage(role, content, sources = [], chatId = null) {
+  // Добавить сообщение в локальный список
+  function addMessage(role, content, sources = [], msgSessionId = null) {
     messages.value.push({
       id: Date.now(),
       role,
       content,
       sources,
-      chatId, // Сохраняем chatId для каждого сообщения ассистента
+      sessionId: msgSessionId,
       timestamp: new Date()
     })
+  }
+
+  // Начать новый чат (очистить всё и сбросить sessionId)
+  function newChat() {
+    messages.value = []
+    sessionId.value = null
+    error.value = null
   }
 
   // Отправить вопрос
@@ -31,11 +38,8 @@ export const useChatStore = defineStore('chat', () => {
     error.value = null
 
     try {
-      // Добавляем вопрос пользователя
       addMessage('user', question)
 
-      console.log('Sending question to RAG API via chatService...')
-      // Формируем параметры запроса
       const params = {
         k: parameters.top_k || 30,
         rerank_top_k: parameters.rerank_top_k || 3,
@@ -43,20 +47,19 @@ export const useChatStore = defineStore('chat', () => {
         max_tokens: parameters.max_tokens || 2000,
         min_score: parameters.min_score || 0.0
       }
+
+      // Добавляем session_id только если он есть, иначе не передаём
+      if (sessionId.value) {
+        params.session_id = sessionId.value
+      }
+
       const response = await chatService.sendQuery(question, params)
 
-      // Сохраняем chat_id из ответа (если бэкенд возвращает)
-      if (response.chat_id) {
-        currentChatId.value = response.chat_id
+      if (response.session_id) {
+        sessionId.value = response.session_id
       }
 
-      // Добавляем ответ ассистента с chatId
-      addMessage('assistant', response.answer, response.sources || [], response.chat_id || null)
-
-      // Загружаем фидбек для этого чата если есть chat_id
-      if (response.chat_id) {
-        await loadFeedback(response.chat_id)
-      }
+      addMessage('assistant', response.answer, response.sources || [], response.session_id)
 
       return response
     } catch (err) {
@@ -69,7 +72,7 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  // Отправить фидбек (лайк/дизлайк)
+  // Отправить фидбек (лайк/дизлайк/звезда)
   async function submitFeedback(chatId, type, rating = null, comment = null) {
     try {
       const result = await feedbackService.createFeedback(chatId, type, rating, comment)
@@ -92,7 +95,7 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  // Загрузить фидбек для чата
+  // Загрузить фидбек для конкретного чата
   async function loadFeedback(chatId) {
     try {
       const result = await feedbackService.getFeedback(chatId)
@@ -102,7 +105,7 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  // Загрузить историю чатов
+  // Загрузить историю чатов пользователя
   async function loadHistory(limit = 50) {
     if (!authStore.user) {
       console.log('User not authenticated, skipping history load')
@@ -118,11 +121,9 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  // Очистить текущий чат
+  // Очистить текущий чат (синоним newChat)
   function clearChat() {
-    messages.value = []
-    error.value = null
-    currentChatId.value = null
+    newChat()
   }
 
   return {
@@ -130,12 +131,13 @@ export const useChatStore = defineStore('chat', () => {
     isLoading,
     error,
     history,
-    currentChatId,
+    sessionId,
     feedbacks,
     addMessage,
     sendQuestion,
-    loadHistory,
+    newChat,
     clearChat,
+    loadHistory,
     submitFeedback,
     removeFeedback,
     loadFeedback
