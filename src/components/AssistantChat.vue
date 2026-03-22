@@ -11,7 +11,7 @@
         <path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clip-rule="evenodd"/>
       </svg>
     </button>
-    
+
     <!-- Окно чата -->
     <div
       v-else
@@ -19,7 +19,10 @@
     >
       <!-- Заголовок -->
       <div class="bg-primary text-white p-4 rounded-t-lg flex justify-between items-center">
-        <h3 class="font-semibold">🤖 Ассистент Башкирэнерго</h3>
+        <div class="flex items-center gap-2">
+          <span>🤖</span>
+          <h3 class="font-semibold">Ассистент Башкирэнерго</h3>
+        </div>
         <button @click="closeChat" class="text-white hover:text-gray-200">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -29,6 +32,12 @@
 
       <!-- История сообщений -->
       <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+        <!-- Приветствие -->
+        <div v-if="messages.length === 0" class="text-center py-8">
+          <div class="text-4xl mb-2">👋</div>
+          <p class="text-sm text-gray-600">Здравствуйте! Задайте вопрос о подключении к электросетям.</p>
+        </div>
+
         <div v-for="(message, index) in messages" :key="index">
           <!-- Сообщение пользователя -->
           <div v-if="message.role === 'user'" class="flex justify-end mb-2">
@@ -40,15 +49,21 @@
           <!-- Сообщение ассистента -->
           <div v-else class="flex justify-start mb-2">
             <div class="bg-white text-gray-800 rounded-lg rounded-tl-none p-3 max-w-[85%] shadow-sm border border-gray-200">
-              <div class="whitespace-pre-wrap">{{ message.content }}</div>
-              
+              <!-- Индикатор streaming -->
+              <div v-if="message.content === '' && chatStore.isLoading" class="typing-indicator">
+                <span class="dot"></span>
+                <span class="dot"></span>
+                <span class="dot"></span>
+              </div>
+              <div v-else class="whitespace-pre-wrap">{{ message.content }}</div>
+
               <!-- Источники -->
               <div v-if="message.sources && message.sources.length > 0" class="mt-3 pt-3 border-t border-gray-200">
                 <p class="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Источники:</p>
                 <div class="space-y-2">
-                  <div 
-                    v-for="(source, i) in message.sources" 
-                    :key="i" 
+                  <div
+                    v-for="(source, i) in message.sources"
+                    :key="i"
                     class="source-card text-xs bg-blue-50 border border-blue-200 rounded-md p-2 hover:bg-blue-100 transition-colors cursor-pointer"
                     @click="showSourceDetails(source)"
                   >
@@ -62,10 +77,10 @@
                         <div v-if="source.summary" class="text-gray-600 mt-1 line-clamp-2">{{ truncateText(source.summary, 150) }}</div>
                         <div class="flex gap-2 mt-1">
                           <span v-if="source.score_hybrid" class="inline-flex items-center px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">
-                            Hybrid: {{ (source.score_hybrid * 100).toFixed(0) }}%
+                            {{ (source.score_hybrid * 100).toFixed(0) }}%
                           </span>
                           <span v-if="source.score_rerank" class="inline-flex items-center px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">
-                            Rerank: {{ (source.score_rerank * 100).toFixed(0) }}%
+                            {{ (source.score_rerank * 100).toFixed(0) }}%
                           </span>
                         </div>
                       </div>
@@ -75,9 +90,9 @@
               </div>
 
               <!-- Фидбек кнопки -->
-              <div class="mt-3 pt-2 border-t border-gray-200 flex items-center gap-2">
-                <span class="text-xs text-gray-500">Оцените ответ:</span>
-                <button 
+              <div v-if="message.sessionId" class="mt-3 pt-2 border-t border-gray-200 flex items-center gap-2">
+                <span class="text-xs text-gray-500">Оцените:</span>
+                <button
                   @click="handleFeedback(message, 'like')"
                   class="feedback-btn"
                   :class="{ 'active': getFeedbackStatus(message) === 'like' }"
@@ -85,7 +100,7 @@
                 >
                   👍
                 </button>
-                <button 
+                <button
                   @click="handleFeedback(message, 'dislike')"
                   class="feedback-btn"
                   :class="{ 'active': getFeedbackStatus(message) === 'dislike' }"
@@ -107,23 +122,6 @@
               <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
             </div>
           </div>
-        </div>
-
-        <!-- Рейтинг диалога (появляется после ответа) -->
-        <div v-if="showStarRating && messages.length > 1" class="star-rating-container bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
-          <p class="text-sm text-gray-700 mb-2 text-center">Оцените качество ответа:</p>
-          <div class="flex justify-center gap-1">
-            <button 
-              v-for="star in 5" 
-              :key="star"
-              @click="submitStarRating(star)"
-              class="star-btn text-2xl focus:outline-none transition-transform hover:scale-110"
-              :class="{ 'active': star <= selectedStars }"
-            >
-              {{ star <= selectedStars ? '⭐' : '☆' }}
-            </button>
-          </div>
-          <p v-if="ratingSubmitted" class="text-xs text-green-600 text-center mt-2">Спасибо за оценку!</p>
         </div>
       </div>
 
@@ -195,26 +193,19 @@
 <script setup>
 import { ref, onMounted, nextTick, watch, computed } from 'vue'
 import { useChatStore } from '../stores/chatStore'
-import { useAuthStore } from '../stores/authStore'
 
 const chatStore = useChatStore()
-const authStore = useAuthStore()
 
 const isOpen = ref(false)
 const inputMessage = ref('')
 const messagesContainer = ref(null)
 const selectedSource = ref(null)
 
-// Для рейтинга
-const showStarRating = ref(false)
-const selectedStars = ref(0)
-const ratingSubmitted = ref(false)
-
 // Получаем сообщения из store
 const messages = computed(() => chatStore.messages)
 const isLoading = computed(() => chatStore.isLoading)
 
-// Пример начальных сообщений
+// Приветственное сообщение
 onMounted(() => {
   if (messages.value.length === 0) {
     chatStore.addMessage('assistant', 'Здравствуйте! Я ассистент Башкирэнерго. Задайте мне вопрос о технологическом присоединении, тарифах или услугах компании.')
@@ -234,16 +225,9 @@ async function sendMessage() {
 
   const userMessage = inputMessage.value.trim()
   inputMessage.value = ''
-  
-  // Сбрасываем рейтинг при новом вопросе
-  showStarRating.value = false
-  selectedStars.value = 0
-  ratingSubmitted.value = false
 
   try {
     await chatStore.sendQuestion(userMessage)
-    // Показываем рейтинг после получения ответа
-    showStarRating.value = true
   } catch (error) {
     console.error('Send message error:', error)
   } finally {
@@ -254,20 +238,17 @@ async function sendMessage() {
 // Обработка фидбека (лайк/дизлайк)
 async function handleFeedback(message, type) {
   const currentStatus = getFeedbackStatus(message)
-  const chatId = message.chatId || chatStore.currentChatId
-  
+  const chatId = message.sessionId
+
   if (!chatId) {
-    console.warn('No chatId available for feedback')
-    alert('Сначала отправьте вопрос, чтобы оставить отзыв')
+    console.warn('No sessionId available for feedback')
     return
   }
 
   try {
     if (currentStatus === type) {
-      // Если уже оценено этим типом - удаляем фидбек
       await chatStore.removeFeedback(chatId)
     } else {
-      // Иначе отправляем новый фидбек
       await chatStore.submitFeedback(chatId, type)
     }
   } catch (err) {
@@ -277,37 +258,13 @@ async function handleFeedback(message, type) {
 
 // Получить статус фидбека для сообщения
 function getFeedbackStatus(message) {
-  const chatId = message.chatId || chatStore.currentChatId
+  const chatId = message.sessionId
   if (!chatId) return null
-  
+
   const feedback = chatStore.feedbacks[chatId]
   if (!feedback) return null
-  
+
   return feedback.feedback_type
-}
-
-// Отправка звездного рейтинга
-async function submitStarRating(stars) {
-  const chatId = chatStore.currentChatId
-  
-  if (!chatId) {
-    console.warn('No chatId available for star rating')
-    return
-  }
-
-  selectedStars.value = stars
-  
-  try {
-    await chatStore.submitFeedback(chatId, 'star', stars)
-    ratingSubmitted.value = true
-    
-    // Скрываем рейтинг через 2 секунды после отправки
-    setTimeout(() => {
-      showStarRating.value = false
-    }, 2000)
-  } catch (err) {
-    console.error('Star rating error:', err)
-  }
 }
 
 // Показать детали источника
@@ -358,15 +315,18 @@ watch(messages, () => {
   transform: scale(1.1);
 }
 
-.star-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.star-btn.active {
-  transform: scale(1.2);
+.source-number {
+  width: 24px;
+  height: 24px;
+  background: #0066cc;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 12px;
+  flex-shrink: 0;
 }
 
 .source-card {
@@ -385,18 +345,26 @@ watch(messages, () => {
   overflow: hidden;
 }
 
-.star-rating-container {
-  animation: fadeIn 0.3s ease-in;
+/* Индикатор набора текста */
+.typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 4px 0;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.typing-indicator .dot {
+  width: 8px;
+  height: 8px;
+  background: #9ca3af;
+  border-radius: 50%;
+  animation: bounce 1.4s infinite ease-in-out;
+}
+
+.typing-indicator .dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-indicator .dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
 }
 </style>

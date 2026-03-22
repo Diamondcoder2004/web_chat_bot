@@ -1,29 +1,46 @@
 import { createClient } from '@supabase/supabase-js'
 
 // Безопасно получаем переменные окружения
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'http://localhost:8000'
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzczMjU1NjAwLCJleHAiOjE5MzEwMjIwMDB9.50mP01rS2HH53tuHsgQd7kg-Uc3OSQBeaHOkyejEPQQ'
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'http://localhost:54321'
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0'
+
+// Флаг для тестового режима (без Supabase)
+const TEST_MODE = import.meta.env.VITE_TEST_MODE === 'true'
 
 console.log('Supabase URL:', supabaseUrl)
+console.log('Test Mode:', TEST_MODE ? '✅ ON (Mock Auth)' : '❌ OFF')
 
 // Создаем клиент с обработкой ошибок
 let supabase = null
-try {
-  supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: true
-    }
-  })
-  console.log('Supabase client created successfully')
-} catch (error) {
-  console.error('Error creating Supabase client:', error)
+if (!TEST_MODE) {
+  try {
+    supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+      }
+    })
+    console.log('Supabase client created successfully')
+  } catch (error) {
+    console.error('Error creating Supabase client:', error)
+  }
+} else {
+  console.warn('⚠️ TEST MODE: Supabase disabled, using mock authentication')
 }
 
 // Функции для работы с аутентификацией
 export const authService = {
   async signUp(email, password, fullName) {
+    if (TEST_MODE) {
+      // Mock регистрация
+      const user = { id: 'test-user-id', email, user_metadata: { full_name: fullName } }
+      const session = { access_token: 'mock-jwt-token', user }
+      localStorage.setItem('mock-user', JSON.stringify(user))
+      localStorage.setItem('mock-session', JSON.stringify(session))
+      return { data: { user, session }, error: null }
+    }
+
     if (!supabase) {
       console.warn('Supabase client not initialized')
       return { data: null, error: 'Supabase not initialized' }
@@ -47,6 +64,15 @@ export const authService = {
   },
 
   async signIn(email, password) {
+    if (TEST_MODE) {
+      // Mock вход
+      const user = { id: 'test-user-id', email, user_metadata: { full_name: 'Test User' } }
+      const session = { access_token: 'mock-jwt-token', user }
+      localStorage.setItem('mock-user', JSON.stringify(user))
+      localStorage.setItem('mock-session', JSON.stringify(session))
+      return { data: { user, session }, error: null }
+    }
+
     if (!supabase) {
       console.warn('Supabase client not initialized')
       return { data: null, error: 'Supabase not initialized' }
@@ -65,6 +91,13 @@ export const authService = {
   },
 
   async signOut() {
+    if (TEST_MODE) {
+      // Mock выход
+      localStorage.removeItem('mock-user')
+      localStorage.removeItem('mock-session')
+      return { error: null }
+    }
+
     if (!supabase) {
       console.warn('Supabase client not initialized')
       return { error: 'Supabase not initialized' }
@@ -80,6 +113,12 @@ export const authService = {
   },
 
   async getCurrentUser() {
+    if (TEST_MODE) {
+      // Mock пользователь
+      const user = localStorage.getItem('mock-user')
+      return user ? JSON.parse(user) : null
+    }
+
     if (!supabase) {
       console.warn('Supabase client not initialized')
       return null
@@ -95,6 +134,18 @@ export const authService = {
   },
 
   async getSession() {
+    if (TEST_MODE) {
+      // Mock сессия
+      const session = localStorage.getItem('mock-session')
+      if (session) {
+        const parsed = JSON.parse(session)
+        console.log('Mock session: ✅ exists')
+        console.log('Token preview:', parsed.access_token.substring(0, 20) + '...')
+        return parsed
+      }
+      return null
+    }
+
     if (!supabase) {
       console.warn('Supabase client not initialized')
       return null
@@ -116,7 +167,7 @@ export const authService = {
 
 // Сервис для работы с фидбеком (через FastAPI)
 export const feedbackService = {
-  async createFeedback(chatId, feedbackType, rating, comment) {
+  async createFeedback(queryId, feedbackType, rating, comment) {
     const session = await authService.getSession();
     if (!session) throw new Error('Not authenticated');
 
@@ -127,7 +178,7 @@ export const feedbackService = {
         'Authorization': `Bearer ${session.access_token}`
       },
       body: JSON.stringify({
-        chat_id: chatId,
+        query_id: queryId,
         feedback_type: feedbackType,
         rating,
         comment
@@ -142,11 +193,11 @@ export const feedbackService = {
     return response.json();
   },
 
-  async getFeedback(chatId) {
+  async getFeedback(queryId) {
     const session = await authService.getSession();
     if (!session) throw new Error('Not authenticated');
 
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/feedback/${chatId}`, {
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/feedback/${queryId}`, {
       headers: {
         'Authorization': `Bearer ${session.access_token}`
       }
@@ -161,11 +212,11 @@ export const feedbackService = {
     return response.json();
   },
 
-  async deleteFeedback(chatId) {
+  async deleteFeedback(queryId) {
     const session = await authService.getSession();
     if (!session) throw new Error('Not authenticated');
 
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/feedback/${chatId}`, {
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/feedback/${queryId}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${session.access_token}`
@@ -198,8 +249,7 @@ export const chatService = {
       },
       body: JSON.stringify({
         query,
-        k: params.k || 30,
-        rerank_top_k: params.rerank_top_k || 3,
+        k: params.k || 10,
         temperature: params.temperature || 0.8,
         max_tokens: params.max_tokens || 2000,
         min_score: params.min_score || 0.0,
@@ -216,6 +266,113 @@ export const chatService = {
     }
 
     return response.json();
+  },
+
+  // Streaming запрос с чтением токенов (SSE)
+  async sendQueryStream(query, params = {}, onToken, onSources, onSessionId, onStatus) {
+    const session = await authService.getSession();
+    if (!session) throw new Error('Not authenticated');
+
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/query/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({
+        query,
+        k: params.k || 10,
+        temperature: params.temperature || 0.8,
+        max_tokens: params.max_tokens || 2000,
+        min_score: params.min_score || 0.0,
+        session_id: params.session_id || null
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`API error: ${error}`);
+    }
+
+    // Читаем поток данных (SSE format)
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let sources = [];
+    let sessionId = null;
+    let currentEvent = null;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
+
+        // Разделяем по строкам SSE формата
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // Последняя неполная строка остаётся в буфере
+
+        for (const line of lines) {
+          // Пропускаем пустые строки
+          if (!line.trim()) continue;
+
+          // Обработка event: строки
+          if (line.startsWith('event: ')) {
+            currentEvent = line.slice(7).trim();
+            continue;
+          }
+
+          // Обработка data: строки
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+
+            try {
+              // Для token событий данные могут быть простой строкой
+              if (currentEvent === 'token') {
+                onToken?.(data)
+                continue
+              }
+
+              // Для остальных событий парсим JSON
+              if (data.startsWith('{') || data.startsWith('[')) {
+                const parsed = JSON.parse(data)
+
+                if (currentEvent === 'sources') {
+                  sources = parsed;
+                  onSources?.(sources);
+                } else if (currentEvent === 'session_id') {
+                  sessionId = parsed;
+                  onSessionId?.(sessionId);
+                } else if (currentEvent === 'status') {
+                  onStatus?.(parsed);
+                } else if (currentEvent === 'done') {
+                  // Завершение, данные - полный ответ
+                  return {
+                    session_id: sessionId,
+                    sources,
+                    answer: parsed
+                  };
+                } else if (currentEvent === 'error') {
+                  throw new Error(parsed);
+                }
+              }
+            } catch {
+              // Игнорируем ошибки парсинга для неполных данных
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Stream reading error:', err);
+      throw err;
+    }
+
+    return {
+      session_id: sessionId,
+      sources
+    };
   },
 
   async getHistory(limit = 50) {

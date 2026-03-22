@@ -18,6 +18,8 @@
     "@supabase/supabase-js": "^2.87.1",
     "axios": "^1.13.2",
     "bootstrap": "^5.3.8",
+    "katex": "^0.16.40",
+    "marked": "^17.0.5",
     "pinia": "^3.0.4",
     "vue": "^3.5.25",
     "vue-router": "^4.6.3",

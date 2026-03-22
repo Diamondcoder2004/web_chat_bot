@@ -10,29 +10,86 @@ export const useChatStore = defineStore('chat', () => {
   const history = ref([])
   const sessionId = ref(null)               // идентификатор текущего диалога
   const feedbacks = ref({})                  // key: chatId, value: feedback object
+  const chatSessions = ref([])               // список сессий чатов
+  const currentSessionTitle = ref('')        // заголовок текущей сессии
 
   const authStore = useAuthStore()
 
   // Добавить сообщение в локальный список
-// Добавить сообщение в локальный список
-  function addMessage(role, content, sources = [], msgSessionId = null) {
+  function addMessage(role, content, sources = [], msgSessionId = null, queryId = null) {
     messages.value.push({
       id: Date.now(),
       role,
       content,
       sources,
-      sessionId: msgSessionId,  // ← это поле должно совпадать с тем, что используется в шаблоне
+      sessionId: msgSessionId,
+      queryId, // ID конкретного ответа для фидбека
       timestamp: new Date()
     })
   }
+
   // Начать новый чат (очистить всё и сбросить sessionId)
   function newChat() {
     messages.value = []
     sessionId.value = null
     error.value = null
+    currentSessionTitle.value = ''
   }
 
-  // Отправить вопрос
+  // Загрузить сессию чата
+  async function loadSession(session) {
+    sessionId.value = session.id
+    currentSessionTitle.value = session.question?.substring(0, 50) || 'Чат'
+    messages.value = [
+      {
+        id: Date.now() - 1,
+        role: 'user',
+        content: session.question,
+        sources: [],
+        sessionId: session.id,
+        timestamp: new Date(session.created_at)
+      },
+      {
+        id: Date.now(),
+        role: 'assistant',
+        content: session.answer,
+        sources: session.sources || [],
+        sessionId: session.id,
+        timestamp: new Date(session.created_at)
+      }
+    ]
+  }
+
+  // Обновить список сессий из истории
+  function updateSessionsFromHistory(historyData) {
+    // Группируем по session_id
+    const sessionsMap = new Map()
+    historyData.forEach(chat => {
+      if (!chat.session_id) return
+      if (!sessionsMap.has(chat.session_id)) {
+        sessionsMap.set(chat.session_id, {
+          id: chat.session_id,
+          question: chat.question,
+          answer: chat.answer,
+          sources: chat.sources,
+          created_at: chat.created_at,
+          messagesCount: 1
+        })
+      } else {
+        const session = sessionsMap.get(chat.session_id)
+        session.messagesCount++
+        // Обновляем последний вопрос/ответ
+        session.question = chat.question
+        session.answer = chat.answer
+        session.sources = chat.sources
+      }
+    })
+    chatSessions.value = Array.from(sessionsMap.values()).sort(
+      (a, b) => new Date(b.created_at) - new Date(a.created_at)
+    )
+  }
+
+  // Отправить вопрос (без streaming)
   async function sendQuestion(question, parameters = {}) {
     isLoading.value = true
     error.value = null
@@ -41,8 +98,7 @@ export const useChatStore = defineStore('chat', () => {
       addMessage('user', question)
 
       const params = {
-        k: parameters.top_k || 30,
-        rerank_top_k: parameters.rerank_top_k || 3,
+        k: parameters.k || 10,
         temperature: parameters.temperature || 0.8,
         max_tokens: parameters.max_tokens || 2000,
         min_score: parameters.min_score || 0.0
@@ -53,13 +109,16 @@ export const useChatStore = defineStore('chat', () => {
         params.session_id = sessionId.value
       }
 
+      // Запускаем обычный запрос
       const response = await chatService.sendQuery(question, params)
 
+      // Сохраняем session_id
       if (response.session_id) {
         sessionId.value = response.session_id
       }
 
-      addMessage('assistant', response.answer, response.sources || [], response.session_id)
+      // Добавляем сообщение с ответом и источниками, сохраняем query_id для фидбека
+      addMessage('assistant', response.answer, response.sources || [], response.session_id, response.query_id)
 
       return response
     } catch (err) {
@@ -73,10 +132,22 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   // Отправить фидбек (лайк/дизлайк/звезда)
-  async function submitFeedback(chatId, type, rating = null, comment = null) {
+  async function submitFeedback(queryId, type, rating = null, comment = null) {
+    // Проверка на уже существующий фидбек того же типа
+    const existing = feedbacks.value[queryId]
+    if (existing && existing.feedback_type === type) {
+      // Если такой же тип — ничего не делаем (уже проголосовано)
+      return existing
+    }
+
     try {
-      const result = await feedbackService.createFeedback(chatId, type, rating, comment)
-      feedbacks.value[chatId] = result
+      // Если есть существующий фидбек — сначала удаляем его
+      if (existing) {
+        await feedbackService.deleteFeedback(queryId)
+      }
+
+      const result = await feedbackService.createFeedback(queryId, type, rating, comment)
+      feedbacks.value[queryId] = result
       return result
     } catch (err) {
       console.error('Failed to submit feedback:', err)
@@ -85,21 +156,21 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   // Удалить фидбек
-  async function removeFeedback(chatId) {
+  async function removeFeedback(queryId) {
     try {
-      await feedbackService.deleteFeedback(chatId)
-      delete feedbacks.value[chatId]
+      await feedbackService.deleteFeedback(queryId)
+      delete feedbacks.value[queryId]
     } catch (err) {
       console.error('Failed to delete feedback:', err)
       throw err
     }
   }
 
-  // Загрузить фидбек для конкретного чата
-  async function loadFeedback(chatId) {
+  // Загрузить фидбек для конкретного query
+  async function loadFeedback(queryId) {
     try {
-      const result = await feedbackService.getFeedback(chatId)
-      if (result) feedbacks.value[chatId] = result
+      const result = await feedbackService.getFeedback(queryId)
+      if (result) feedbacks.value[queryId] = result
     } catch (err) {
       console.error('Failed to load feedback:', err)
     }
@@ -115,6 +186,8 @@ export const useChatStore = defineStore('chat', () => {
     try {
       const data = await chatService.getHistory(limit)
       history.value = data || []
+      // Обновляем сессии из истории
+      updateSessionsFromHistory(history.value)
       console.log('Chat history loaded:', history.value.length, 'items')
     } catch (err) {
       console.error('Failed to load chat history:', err)
@@ -133,10 +206,13 @@ export const useChatStore = defineStore('chat', () => {
     history,
     sessionId,
     feedbacks,
+    chatSessions,
+    currentSessionTitle,
     addMessage,
     sendQuestion,
     newChat,
     clearChat,
+    loadSession,
     loadHistory,
     submitFeedback,
     removeFeedback,
