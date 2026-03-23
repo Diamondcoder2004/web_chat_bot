@@ -4,7 +4,7 @@
       <div class="login-card">
         <!-- Шапка формы -->
         <div class="form-header">
-          <img src="../assets/images/logo.png" alt="Логотип" class="form-logo">
+          <!-- <img src="../assets/images/logo.png" alt="Логотип" class="form-logo"> -->
           <h1>Вход в систему</h1>
           <p>Введите данные для доступа к ассистенту</p>
         </div>

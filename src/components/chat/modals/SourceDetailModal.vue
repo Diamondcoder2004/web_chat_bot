@@ -21,10 +21,10 @@
           <p>{{ source.breadcrumbs }}</p>
         </div>
 
-        <div class="detail-section" v-if="source.category">
+        <!-- <div class="detail-section" v-if="source.category">
           <h4>Категория</h4>
           <p>{{ source.category }}</p>
-        </div>
+        </div> -->
 
         <div class="detail-section" v-if="source.summary">
           <h4>Краткое содержание</h4>
@@ -33,7 +33,7 @@
 
         <div class="detail-section" v-if="source.content">
           <h4>Полное содержание</h4>
-          <p class="full-content">{{ source.content }}</p>
+          <div class="full-content" v-html="renderedContent"></div>
         </div>
 
         <div class="detail-section">
@@ -64,7 +64,9 @@
 </template>
 
 <script setup>
-defineProps({
+import { computed } from 'vue'
+
+const props = defineProps({
   source: {
     type: Object,
     required: true,
@@ -72,7 +74,63 @@ defineProps({
   }
 })
 
-defineEmits(['close'])
+const emit = defineEmits(['close'])
+
+// Рендерим контент (поддержка HTML и Markdown)
+const renderedContent = computed(() => {
+  if (!props.source?.content) return ''
+  
+  let content = props.source.content
+  
+  // Если контент уже содержит HTML-теги, используем его как есть
+  if (content.includes('<br>') || content.includes('<table') || content.includes('<tr>') || content.includes('<td>')) {
+    return content
+  }
+  
+  // Иначе применяем базовый Markdown-парсинг
+  // Экранируем HTML для безопасности
+  content = content
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  
+  // Заголовки (#, ##, ### и т.д.)
+  content = content.replace(/^###### (.*$)/gim, '<h6>$1</h6>')
+  content = content.replace(/^##### (.*$)/gim, '<h5>$1</h5>')
+  content = content.replace(/^#### (.*$)/gim, '<h4>$1</h4>')
+  content = content.replace(/^### (.*$)/gim, '<h3>$1</h3>')
+  content = content.replace(/^## (.*$)/gim, '<h2>$1</h2>')
+  content = content.replace(/^# (.*$)/gim, '<h1>$1</h1>')
+  
+  // Жирный текст (**text** или __text__)
+  content = content.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+  content = content.replace(/__(.*?)__/gim, '<strong>$1</strong>')
+  
+  // Курсив (*text* или _text_)
+  content = content.replace(/\*(.*?)\*/gim, '<em>$1</em>')
+  content = content.replace(/_(.*?)_/gim, '<em>$1</em>')
+  
+  // Списки (- item или * item)
+  content = content.replace(/^\s*[-*]\s+(.*$)/gim, '<li>$1</li>')
+  content = content.replace(/(<li>.*<\/li>\n?)+/gim, '<ul>$&</ul>')
+  
+  // Нумерованные списки (1. item)
+  content = content.replace(/^\s*\d+\.\s+(.*$)/gim, '<li>$1</li>')
+  
+  // Ссылки [text](url)
+  content = content.replace(/\[(.*?)\]\((.*?)\)/gim, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+  
+  // Код в строке (`code`)
+  content = content.replace(/`(.*?)`/gim, '<code>$1</code>')
+  
+  // Блоки кода (```code```)
+  content = content.replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>')
+  
+  // Переносы строк (заменяем на <br> или оборачиваем в <p>)
+  content = content.split('\n\n').map(p => `<p>${p.trim()}</p>`).join('')
+  
+  return content
+})
 
 function formatScore(score) {
   if (score === undefined || score === null || score === '') return '0%'
@@ -180,14 +238,111 @@ function formatFilename(filename) {
 
 .detail-section .full-content {
   background: #f9fafb;
-  padding: 12px;
+  padding: 16px;
   border-radius: 6px;
   border: 1px solid #e5e7eb;
-  font-family: monospace;
-  white-space: pre-wrap;
-  max-height: 300px;
+  max-height: 400px;
   overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.detail-section .full-content h1,
+.detail-section .full-content h2,
+.detail-section .full-content h3,
+.detail-section .full-content h4,
+.detail-section .full-content h5,
+.detail-section .full-content h6 {
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.detail-section .full-content h1 { font-size: 1.5em; }
+.detail-section .full-content h2 { font-size: 1.3em; }
+.detail-section .full-content h3 { font-size: 1.2em; }
+.detail-section .full-content h4 { font-size: 1.1em; }
+
+.detail-section .full-content p {
+  margin: 0.5em 0;
+  color: #4b5563;
+}
+
+.detail-section .full-content ul,
+.detail-section .full-content ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.detail-section .full-content li {
+  margin: 0.25em 0;
+}
+
+.detail-section .full-content strong {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.detail-section .full-content code {
+  background: #e5e7eb;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+  color: #dc2626;
+}
+
+.detail-section .full-content pre {
+  background: #1f2937;
+  color: #f9fafb;
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.detail-section .full-content pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+.detail-section .full-content a {
+  color: #0066cc;
+  text-decoration: underline;
+}
+
+.detail-section .full-content a:hover {
+  text-decoration: none;
+}
+
+.detail-section .full-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
   font-size: 13px;
+}
+
+.detail-section .full-content th,
+.detail-section .full-content td {
+  border: 1px solid #d1d5db;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.detail-section .full-content th {
+  background: #f3f4f6;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.detail-section .full-content tr:nth-child(even) {
+  background: #f9fafb;
+}
+
+.detail-section .full-content tr:hover {
+  background: #f3f4f6;
 }
 
 .detail-section .chunk-id {

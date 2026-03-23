@@ -1,7 +1,7 @@
 <template>
   <footer class="footer">
     <div class="container">
-      <p>2026 Интеллектуальный Ассистент Башкирэнерго</p>
+      <p>2026 Интеллектуальный Ассистент по Технологическому присоединению</p>
       <p>Для связи: almaz_sabitov04@mail.ru</p>
     </div>
   </footer>

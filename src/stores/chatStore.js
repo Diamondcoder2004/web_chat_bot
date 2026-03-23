@@ -12,6 +12,7 @@ export const useChatStore = defineStore('chat', () => {
   const feedbacks = ref({})                  // key: chatId, value: feedback object
   const chatSessions = ref([])               // список сессий чатов
   const currentSessionTitle = ref('')        // заголовок текущей сессии
+  const isLoadingHistory = ref(false)        // флаг загрузки истории
 
   const authStore = useAuthStore()
 
@@ -178,19 +179,40 @@ export const useChatStore = defineStore('chat', () => {
 
   // Загрузить историю чатов пользователя
   async function loadHistory(limit = 50) {
+    console.log('loadHistory called, isLoadingHistory:', isLoadingHistory.value, 'history.length:', history.value?.length)
+
     if (!authStore.user) {
       console.log('User not authenticated, skipping history load')
       return
     }
 
+    // Защита от повторных вызовов
+    if (isLoadingHistory.value) {
+      console.log('History already loading, skipping')
+      return
+    }
+
+    // Если история уже загружена, не загружаем снова
+    if (history.value.length > 0) {
+      console.log('History already loaded:', history.value.length, 'items')
+      return
+    }
+
+    isLoadingHistory.value = true
+
     try {
       const data = await chatService.getHistory(limit)
+      console.log('loadHistory: received data:', data?.length, 'items')
       history.value = data || []
+      console.log('loadHistory: set history.value to:', history.value.length, 'items')
+      console.log('Chat history loaded:', history.value.length, 'items')
+      console.log('History data:', history.value)
       // Обновляем сессии из истории
       updateSessionsFromHistory(history.value)
-      console.log('Chat history loaded:', history.value.length, 'items')
     } catch (err) {
       console.error('Failed to load chat history:', err)
+    } finally {
+      isLoadingHistory.value = false
     }
   }
 
@@ -208,6 +230,7 @@ export const useChatStore = defineStore('chat', () => {
     feedbacks,
     chatSessions,
     currentSessionTitle,
+    isLoadingHistory,
     addMessage,
     sendQuestion,
     newChat,

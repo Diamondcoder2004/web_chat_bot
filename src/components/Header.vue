@@ -2,10 +2,10 @@
   <header class="header">
     <div class="header-content">
       <!-- Логотип из локального файла -->
-      <router-link to="/" class="logo">
+      <!-- <router-link to="/" class="logo">
         <img src="../assets/images/logo.png" alt="Башкирэнерго" class="logo-img">
         <span class="logo-text"></span>
-      </router-link>
+      </router-link> -->
 
       <!-- Навигация -->
       <nav class="nav">

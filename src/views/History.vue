@@ -4,7 +4,7 @@
 
     <div class="container">
       <div class="page-header">
-        <h1>📜 История чатов</h1>
+        <h1>История чатов</h1>
         <button @click="loadHistory" class="refresh-btn" :disabled="loading" title="Обновить">
           <svg :class="{ 'spinning': loading }" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M23 4v6h-6M1 20v-6h6"/>
@@ -58,7 +58,7 @@
               <strong>Вопрос:</strong> {{ chat.question }}
             </div>
             <div class="chat-answer">
-              <strong>Ответ:</strong> {{ truncate(chat.answer, 150) }}
+              <strong>Ответ:</strong> <span v-html="renderAnswer(truncate(chat.answer, 150))"></span>
             </div>
           </div>
           <div class="chat-arrow">
@@ -80,10 +80,12 @@ import { useRouter } from 'vue-router'
 import Header from '../components/Header.vue'
 import Footer from '../components/Footer.vue'
 import { useAuthStore } from '../stores/authStore'
+import { useChatStore } from '../stores/chatStore'
 import { chatService } from '../services/supabase'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const chatStore = useChatStore()
 const chats = ref([])
 const filteredChats = ref([])
 const searchQuery = ref('')
@@ -91,15 +93,29 @@ const loading = ref(true)
 
 // Загрузка истории
 async function loadHistory() {
-  if (!authStore.user) return
+  if (!authStore.user) {
+    console.log('User not authenticated, cannot load history')
+    loading.value = false
+    chats.value = []
+    filteredChats.value = []
+    return
+  }
 
   loading.value = true
   try {
-    const data = await chatService.getHistory(100)
-    chats.value = data || []
+    // Загружаем историю через chatStore, чтобы данные сохранились
+    console.log('History.vue: before loadHistory, chatStore.history:', chatStore.history, 'length:', chatStore.history?.length)
+    await chatStore.loadHistory(100)
+    console.log('History.vue: after loadHistory, chatStore.history:', chatStore.history, 'length:', chatStore.history?.length)
+    chats.value = chatStore.history || []
     filteredChats.value = chats.value
+    console.log('History.vue: loaded chats:', chats.value.length)
+    console.log('History.vue: first chat:', chats.value[0])
+    console.log('History.vue: session_ids:', chats.value.map(c => c.session_id))
   } catch (error) {
     console.error('Ошибка загрузки истории:', error)
+    chats.value = []
+    filteredChats.value = []
   } finally {
     loading.value = false
   }
@@ -112,11 +128,14 @@ function searchHistory() {
     return
   }
 
-  const query = searchQuery.value.toLowerCase()
-  filteredChats.value = chats.value.filter(chat =>
-    chat.question.toLowerCase().includes(query) ||
-    chat.answer.toLowerCase().includes(query)
-  )
+  // Нормализуем поисковый запрос: убираем лишние пробелы, приводим к нижнему регистру
+  const query = searchQuery.value.toLowerCase().replace(/\s+/g, ' ').trim()
+  filteredChats.value = chats.value.filter(chat => {
+    // Нормализуем вопрос и ответ для лучшего совпадения
+    const question = (chat.question || '').toLowerCase().replace(/\s+/g, ' ').trim()
+    const answer = (chat.answer || '').toLowerCase().replace(/\s+/g, ' ').trim()
+    return question.includes(query) || answer.includes(query)
+  })
 }
 
 // Форматирование даты
@@ -152,16 +171,64 @@ function truncate(text, length) {
   return text.length > length ? text.slice(0, length) + '...' : text
 }
 
+// Рендеринг ответа (поддержка HTML и Markdown)
+function renderAnswer(text) {
+  if (!text) return ''
+  
+  // Если контент уже содержит HTML-теги, используем его как есть
+  if (text.includes('<br>') || text.includes('<table') || text.includes('<tr>') || 
+      text.includes('<td>') || text.includes('<h') || text.includes('<p>') || 
+      text.includes('<strong>') || text.includes('<ul>') || text.includes('<li>')) {
+    return text
+  }
+  
+  let content = text
+  
+  // Экранируем HTML для безопасности
+  content = content
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  
+  // Заголовки
+  content = content.replace(/^###### (.*$)/gim, '<h6>$1</h6>')
+  content = content.replace(/^##### (.*$)/gim, '<h5>$1</h5>')
+  content = content.replace(/^#### (.*$)/gim, '<h4>$1</h4>')
+  content = content.replace(/^### (.*$)/gim, '<h3>$1</h3>')
+  content = content.replace(/^## (.*$)/gim, '<h2>$1</h2>')
+  content = content.replace(/^# (.*$)/gim, '<h1>$1</h1>')
+  
+  // Жирный текст
+  content = content.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+  content = content.replace(/__(.*?)__/gim, '<strong>$1</strong>')
+  
+  // Курсив
+  content = content.replace(/\*(.*?)\*/gim, '<em>$1</em>')
+  content = content.replace(/_(.*?)_/gim, '<em>$1</em>')
+  
+  // Переносы строк
+  content = content.replace(/\n/g, '<br>')
+  
+  return content
+}
+
 // Возобновить чат (переход на главную с session_id)
 function resumeChat(chat) {
   // Сохраняем session_id в localStorage для восстановления на главной
-  if (chat.session_id) {
-    localStorage.setItem('resumeSessionId', chat.session_id)
+  // Если session_id нет, используем id записи
+  const sessionIdToSave = chat.session_id || chat.id
+  console.log('resumeChat: saving sessionId:', sessionIdToSave, 'from chat:', chat)
+  if (sessionIdToSave) {
+    localStorage.setItem('resumeSessionId', sessionIdToSave)
   }
   router.push('/')
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // Ждем инициализации authStore, если нужно
+  if (!authStore.user && authStore.init) {
+    await authStore.init()
+  }
   loadHistory()
 })
 </script>
@@ -358,7 +425,12 @@ onMounted(() => {
 .chat-question, .chat-answer {
   margin-bottom: 6px;
   line-height: 1.5;
-  font-size: 14px;
+  font-size: 15px;
+}
+
+.chat-question {
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .chat-question strong, .chat-answer strong {
@@ -368,6 +440,89 @@ onMounted(() => {
 
 .chat-answer {
   color: #4b5563;
+}
+
+.chat-answer h1,
+.chat-answer h2,
+.chat-answer h3,
+.chat-answer h4,
+.chat-answer h5,
+.chat-answer h6 {
+  margin: 0.5em 0;
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 1em;
+  line-height: 1.4;
+}
+
+.chat-answer p {
+  margin: 0.5em 0;
+}
+
+.chat-answer strong {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.chat-answer em {
+  font-style: italic;
+}
+
+.chat-answer code {
+  background: #e5e7eb;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+  color: #dc2626;
+}
+
+.chat-answer pre {
+  background: #1f2937;
+  color: #f9fafb;
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.chat-answer pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+.chat-answer ul,
+.chat-answer ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.chat-answer li {
+  margin: 0.25em 0;
+}
+
+.chat-answer table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 13px;
+}
+
+.chat-answer th,
+.chat-answer td {
+  border: 1px solid #d1d5db;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.chat-answer th {
+  background: #f3f4f6;
+  font-weight: 600;
+}
+
+.chat-answer tr:nth-child(even) {
+  background: #f9fafb;
 }
 
 .chat-arrow {

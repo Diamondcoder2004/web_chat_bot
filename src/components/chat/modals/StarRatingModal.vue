@@ -14,10 +14,10 @@
           <span
             v-for="star in 5"
             :key="star"
-            @click="tempRating = star"
-            @mouseover="tempRating = star"
-            @mouseleave="tempRating = 0"
-            :class="{ active: star <= (tempRating || selectedStars) }"
+            @click="selectStar(star)"
+            @mouseover="hoverRating = star"
+            @mouseleave="hoverRating = 0"
+            :class="{ active: star <= (hoverRating || selectedRating) }"
           >
             <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1">
               <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
@@ -26,7 +26,7 @@
         </div>
         <div class="star-actions">
           <button @click="$emit('close')" class="cancel-btn">Отмена</button>
-          <button @click="$emit('submit', tempRating)" class="submit-btn" :disabled="!tempRating">
+          <button @click="$emit('submit', selectedRating)" class="submit-btn" :disabled="!selectedRating">
             Оценить
           </button>
         </div>
@@ -36,9 +36,9 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
-defineProps({
+const props = defineProps({
   selectedStars: {
     type: Number,
     default: 0
@@ -47,7 +47,17 @@ defineProps({
 
 defineEmits(['close', 'submit'])
 
-const tempRating = ref(0)
+const selectedRating = ref(props.selectedStars)
+const hoverRating = ref(0)
+
+// Следим за изменениями selectedStars извне
+watch(() => props.selectedStars, (newVal) => {
+  selectedRating.value = newVal
+})
+
+function selectStar(star) {
+  selectedRating.value = star
+}
 </script>
 
 <style scoped>

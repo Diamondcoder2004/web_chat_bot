@@ -4,7 +4,7 @@
       <div class="register-card">
         <!-- Шапка формы -->
         <div class="form-header">
-          <img src="../assets/images/logo.png" alt="Логотип" class="form-logo">
+          <!-- <img src="../assets/images/logo.png" alt="Логотип" class="form-logo"> -->
           <h1>Регистрация</h1>
           <p>Создайте аккаунт для доступа к ассистенту</p>
         </div>

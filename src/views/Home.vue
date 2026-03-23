@@ -68,6 +68,7 @@
     <!-- Модальное окно звёздного рейтинга -->
     <StarRatingModal
       v-if="showStarRating"
+      :selected-stars="selectedStars"
       @close="showStarRating = false"
       @submit="submitStarRating"
     />
@@ -107,13 +108,10 @@ const searchParams = ref({
 const selectedSource = ref(null)
 const showInfoModal = ref(null)
 const showStarRating = ref(false)
-const tempStarRating = ref(0)
 const currentFeedbackSessionId = ref(null)
 const selectedStars = ref(0)
-const pendingSourceScroll = ref(null)
 
 // Debouncing для фидбека
-const feedbackCooldown = ref(false)
 const feedbackCooldowns = ref({}) // { sessionId: timestamp }
 
 // Развёрнутое сообщение для показа источников
@@ -276,7 +274,6 @@ async function submitStarRating(rating) {
     alert('Не удалось отправить оценку. Попробуйте позже.')
   } finally {
     showStarRating.value = false
-    tempStarRating.value = 0
     currentFeedbackSessionId.value = null
   }
 }
@@ -288,37 +285,67 @@ function openSourceModal(source) {
 
 // Загрузка истории при монтировании
 onMounted(async () => {
+  console.log('Home mounted, checking for resumeSessionId...')
   // Восстановление сессии из History.vue
   const resumeSessionId = localStorage.getItem('resumeSessionId')
+  console.log('resumeSessionId:', resumeSessionId)
+  console.log('authStore.user:', authStore.user)
+  console.log('chatStore.history before load:', chatStore.history?.length || 0)
+
   if (resumeSessionId) {
-    chatStore.sessionId.value = resumeSessionId
     localStorage.removeItem('resumeSessionId')
-    
+
     // Загружаем историю для этой сессии
     if (authStore.user) {
       await chatStore.loadHistory(50)
-      // Находим сообщения для этой сессии
-      const sessionChats = chatStore.history.value.filter(c => c.session_id === resumeSessionId)
+      console.log('chatStore.history after load:', chatStore.history?.length || 0)
+
+      // Находим записи для этой сессии
+      // resumeSessionId может быть session_id или id записи
+      const sessionChats = (chatStore.history || [])
+        .filter(c => c.session_id === resumeSessionId || c.id == resumeSessionId)
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+
+      console.log('sessionChats found:', sessionChats.length)
+
       if (sessionChats.length > 0) {
-        // Добавляем сообщения в текущий чат
+        // Устанавливаем session_id (используем session_id из первой записи, если есть)
+        const actualSessionId = sessionChats[0].session_id || sessionChats[0].id
+        chatStore.sessionId = actualSessionId
+        chatStore.currentSessionTitle = sessionChats[0].question?.substring(0, 50) || 'Чат'
+
+        // Очищаем и добавляем все сообщения из сессии
+        chatStore.messages = []
         for (const chat of sessionChats) {
-          chatStore.messages.value.push({
+          chatStore.messages.push({
             id: Date.now() + chat.id,
             role: 'user',
             content: chat.question,
-            sessionId: resumeSessionId
+            sessionId: actualSessionId,
+            timestamp: new Date(chat.created_at)
           })
-          chatStore.messages.value.push({
+          chatStore.messages.push({
             id: Date.now() + chat.id + 1,
             role: 'assistant',
             content: chat.answer,
-            sessionId: resumeSessionId
+            sources: chat.sources || [],
+            sessionId: actualSessionId,
+            queryId: chat.id,
+            timestamp: new Date(chat.created_at)
           })
         }
+        console.log('Session restored:', chatStore.messages.length, 'messages')
+      } else {
+        console.warn('No chats found for session:', resumeSessionId)
       }
     }
   } else if (authStore.user) {
-    await chatStore.loadHistory(50)
+    // Просто загружаем историю для сессий, но не показываем сообщения
+    // История будет загружена в chatStore и доступна через chatStore.chatSessions
+    console.log('No resumeSessionId, initializing chat sessions')
+    if ((chatStore.history?.length || 0) === 0) {
+      await chatStore.loadHistory(50)
+    }
   }
 })
 </script>
